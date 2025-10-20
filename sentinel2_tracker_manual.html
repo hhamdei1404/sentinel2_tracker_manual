@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentinel-2 Tracker (با موقعیت دستی)</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.28/"></script>
+  <style>
+    html, body, #viewDiv {
+      height: 100%; margin: 0; padding: 0;
+    }
+    #topbar {
+      position: absolute;
+      top: 10px; right: 10px;
+      z-index: 10;
+      background: rgba(255,255,255,0.9);
+      padding: 10px 14px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+    .btn {
+      background: #1976d2; color: #fff; border: none; border-radius: 5px;
+      padding: 8px 10px; cursor: pointer; margin-left: 4px; font-size: 14px;
+    }
+    .btn.secondary { background: #555; }
+  </style>
+</head>
+<body>
+  <div id="viewDiv"></div>
+  <div id="topbar">
+    <span id="status">📍 در انتظار موقعیت...</span><br>
+    <button id="btnStart" class="btn">فعال‌سازی مکان</button>
+    <button id="btnStop" class="btn secondary">توقف دنبال‌کردن</button>
+  </div>
+
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/layers/ImageryLayer",
+      "esri/Graphic"
+    ], function(Map, MapView, ImageryLayer, Graphic) {
+      const map = new Map({ basemap: "arcgis-imagery" });
+
+      const sentinel = new ImageryLayer({
+        portalItem: { id: "fd61b9e0c69c4e14bebd50a9a968348c" },
+        opacity: 1.0
+      });
+      map.add(sentinel);
+
+      const view = new MapView({
+        container: "viewDiv",
+        map: map,
+        center: [51.4, 35.7],
+        zoom: 8
+      });
+
+      let watchId = null;
+      let pointGraphic = null;
+      const status = document.getElementById("status");
+      const btnStart = document.getElementById("btnStart");
+      const btnStop = document.getElementById("btnStop");
+
+      function showPosition(lat, lon) {
+        const point = { type: "point", longitude: lon, latitude: lat };
+        const symbol = {
+          type: "simple-marker",
+          color: [0, 120, 255, 0.8],
+          size: "18px",
+          outline: { color: [255, 255, 255], width: 2 }
+        };
+
+        if (!pointGraphic) {
+          pointGraphic = new Graphic({ geometry: point, symbol });
+          view.graphics.add(pointGraphic);
+        } else {
+          pointGraphic.geometry = point;
+        }
+        view.goTo({ center: [lon, lat], zoom: 13 });
+      }
+
+      // فعال‌سازی GPS
+      btnStart.onclick = () => {
+        if (navigator.geolocation) {
+          status.textContent = "📡 در حال دریافت موقعیت...";
+          watchId = navigator.geolocation.watchPosition(pos => {
+            const lat = pos.coords.latitude.toFixed(6);
+            const lon = pos.coords.longitude.toFixed(6);
+            status.textContent = `✅ در حال دنبال‌کردن: ${lat}, ${lon}`;
+            showPosition(lat, lon);
+          }, err => {
+            status.textContent = "⚠️ خطا در دریافت مکان. لطفاً روی نقشه ضربه بزن تا موقعیت دستی انتخاب شود.";
+            enableManualSelection();
+          }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 });
+        } else {
+          status.textContent = "مرورگر شما GPS را پشتیبانی نمی‌کند. با لمس نقشه موقعیت را انتخاب کنید.";
+          enableManualSelection();
+        }
+      };
+
+      btnStop.onclick = () => {
+        if (watchId) {
+          navigator.geolocation.clearWatch(watchId);
+          watchId = null;
+          status.textContent = "⏹ دنبال‌کردن متوقف شد.";
+        }
+      };
+
+      function enableManualSelection() {
+        view.on("click", event => {
+          const lat = event.mapPoint.latitude.toFixed(6);
+          const lon = event.mapPoint.longitude.toFixed(6);
+          status.textContent = `📍 موقعیت انتخاب‌شده: ${lat}, ${lon}`;
+          showPosition(lat, lon);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
